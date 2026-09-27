@@ -1,0 +1,17 @@
+# Runtime-generated secrets and machine-specific state - never commit these.
+config.json
+cert.pem
+key.pem
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# PyInstaller build output (built via build_exe.ps1 - PhoneMouse.spec stays tracked)
+build/
+dist/
+
+# Misc local artifacts
+*.log
+qr.png

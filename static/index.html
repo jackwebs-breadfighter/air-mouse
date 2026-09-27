@@ -1,0 +1,897 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>AirMouse</title>
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="AirMouse">
+<meta name="theme-color" content="#0b1120">
+<link rel="apple-touch-icon" href="icon-180.png">
+<style>
+  :root {
+    color-scheme: dark;
+    --accent: #0ea5e9; --accent-contrast: #04121f;
+    --bg: #0b1120; --panel-bg: #111827; --panel-border: #1e293b; --panel-border2: #334155;
+    --input-bg: #0f172a; --btn-bg: #1e293b; --btn-bg-active: #334155;
+    --text: #e2e8f0; --text-dim: #94a3b8; --text-dim2: #64748b; --text-secondary: #cbd5e1;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    height: 100%; margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    overflow: hidden; touch-action: none; -webkit-user-select: none; user-select: none;
+    -webkit-touch-callout: none;
+  }
+  body { display: flex; flex-direction: column; }
+  button {
+    -webkit-appearance: none; appearance: none; border: none; border-radius: 12px;
+    background: var(--btn-bg); color: var(--text); font-size: 15px; font-family: inherit;
+    padding: 10px 8px; touch-action: manipulation;
+  }
+  button:active { background: var(--btn-bg-active); }
+  #topbar {
+    display: flex; align-items: center; gap: 8px; padding: max(10px, env(safe-area-inset-top)) 14px 8px;
+    padding-left: max(14px, env(safe-area-inset-left)); padding-right: max(14px, env(safe-area-inset-right));
+    font-size: 14px; font-weight: 600; color: var(--text); flex-shrink: 0; background: var(--bg);
+  }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: #64748b; flex-shrink: 0; }
+  .dot.ok { background: #22c55e; }
+  .dot.connecting { background: #f59e0b; }
+  .dot.error { background: #ef4444; }
+  #statusText { flex: 1; }
+  #settingsBtn { background: transparent; padding: 4px 8px; font-size: 18px; }
+  #content { flex: 1; position: relative; min-height: 0; }
+  .panel { position: absolute; inset: 0; display: flex; flex-direction: column; }
+  .panel[hidden] { display: none; }
+  #trackpad {
+    flex: 1; margin: 0 14px 8px; border-radius: 20px; background: var(--panel-bg);
+    border: 1px solid var(--panel-border); align-items: center; justify-content: center;
+  }
+  .scroll-zone-mark {
+    position: absolute; top: 14px; bottom: 14px; right: 8px; width: 3px;
+    border-radius: 2px; background: var(--panel-border2); opacity: .7; pointer-events: none;
+  }
+  #hint {
+    opacity: .45; font-size: 14px; text-align: center; padding: 0 30px; pointer-events: none;
+    line-height: 1.7; transition: opacity .3s;
+  }
+  #hint.hidden { opacity: 0; }
+  #keyboardPanel, #mediaPanel { padding: 14px; gap: 14px; overflow: hidden; }
+  #shortcutsGrid, #mediaGrid {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;
+  }
+  #shortcutsGrid button, #mediaGrid button {
+    height: 60px; padding: 0 6px; font-size: 14px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #keyboardTrackpad, #mediaTrackpad {
+    position: relative; flex: 1; min-height: 60px; border-radius: 16px; background: var(--panel-bg);
+    border: 1px solid var(--panel-border); display: flex; align-items: center; justify-content: center;
+  }
+  #keyboardTrackpadHint, #mediaTrackpadHint { opacity: .4; font-size: 13px; pointer-events: none; transition: opacity .3s; }
+  #keyboardTrackpadHint.hidden, #mediaTrackpadHint.hidden { opacity: 0; }
+  #kbInputWrap { margin-top: 12px; }
+  #kbInput {
+    width: 100%; font-size: 17px; padding: 14px 16px; border-radius: 12px;
+    border: 1px solid var(--panel-border2); background: var(--input-bg); color: var(--text);
+    -webkit-user-select: text; user-select: text;
+  }
+  #kbInput::placeholder { color: var(--text-dim2); opacity: 1; }
+  #kbHint { font-size: 12px; color: var(--text-dim2); text-align: center; margin-top: 8px; }
+  #mediaGrid button { grid-column: span 2; font-size: 16px; }
+  #toolbar {
+    display: flex; gap: 8px; padding: 8px 14px max(10px, env(safe-area-inset-bottom));
+    padding-left: max(14px, env(safe-area-inset-left)); padding-right: max(14px, env(safe-area-inset-right));
+    flex-shrink: 0; background: var(--bg);
+  }
+  #toolbar button {
+    flex: 1; padding: 12px 4px; font-size: 12px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  #toolbar button.active { background: var(--accent); color: var(--accent-contrast); }
+  #settingsOverlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex;
+    align-items: center; justify-content: center; z-index: 50; padding: 20px;
+  }
+  #settingsOverlay[hidden] { display: none; }
+  #settingsCard {
+    background: var(--panel-bg); border: 1px solid var(--panel-border); border-radius: 16px; padding: 20px;
+    width: min(340px, 100%);
+  }
+  #settingsCard h2 { margin: 0 0 16px; font-size: 18px; }
+  #settingsCard label { display: block; font-size: 14px; color: var(--text-secondary); margin-bottom: 16px; }
+  #settingsCard input[type=range] { width: 100%; margin-top: 6px; }
+  #settingsCard label.checkbox { display: flex; align-items: center; gap: 8px; }
+  #settingsCard label.checkbox input { width: 18px; height: 18px; }
+  #closeSettingsBtn { width: 100%; background: var(--accent); color: var(--accent-contrast); padding: 12px; margin-top: 4px; }
+  #tokenError { padding: 40px 24px; text-align: center; color: #fca5a5; line-height: 1.8; }
+  .settingsRow { margin-bottom: 16px; }
+  .settingsRow > span { display: block; font-size: 14px; color: var(--text-secondary); }
+  #colorSwatches { display: flex; align-items: center; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
+  .swatch {
+    width: 32px; height: 32px; border-radius: 50%; padding: 0;
+    border: 3px solid transparent; background-clip: padding-box;
+  }
+  .swatch.selected { border-color: var(--text); }
+  #customColorInput {
+    width: 32px; height: 32px; padding: 0; border: none; border-radius: 50%;
+    background: none; overflow: hidden;
+  }
+  #customColorInput::-webkit-color-swatch-wrapper { padding: 0; }
+  #customColorInput::-webkit-color-swatch { border: 3px solid var(--panel-border2); border-radius: 50%; }
+  #langButtons { display: flex; gap: 8px; margin-top: 8px; }
+  .langBtn { flex: 1; padding: 10px 6px; font-size: 14px; }
+  .langBtn.selected { background: var(--accent); color: var(--accent-contrast); }
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <span class="dot" id="statusDot"></span>
+  <span id="statusText">連接中...</span>
+  <button id="settingsBtn" data-i18n-title="settingsTitle" title="設定">⚙️</button>
+</div>
+
+<main id="content">
+  <div id="trackpad" class="panel">
+    <div id="hint" data-i18n="hint">單指移動・單指輕點＝左鍵<br>雙指輕點＝右鍵・雙指拖＝捲動<br>輕點後按住＝拖曳</div>
+    <div class="scroll-zone-mark"></div>
+  </div>
+
+  <div id="keyboardPanel" class="panel" hidden>
+    <div id="shortcutsGrid">
+      <button data-key="esc">Esc</button>
+      <button data-key="tab">Tab</button>
+      <button data-key="win">⊞ Win</button>
+      <button data-key="delete">Del</button>
+      <button data-key="left">←</button>
+      <button data-key="up">↑</button>
+      <button data-key="down">↓</button>
+      <button data-key="right">→</button>
+      <button data-combo="ctrl,c">Ctrl+C</button>
+      <button data-combo="ctrl,v">Ctrl+V</button>
+      <button data-combo="ctrl,z">Ctrl+Z</button>
+      <button data-combo="alt,tab">Alt+Tab</button>
+    </div>
+    <div id="keyboardTrackpad">
+      <div id="keyboardTrackpadHint" data-i18n="kbTrackpadHint">呢度都撳到滑鼠</div>
+      <div class="scroll-zone-mark"></div>
+    </div>
+    <div id="kbInputWrap">
+      <input id="kbInput" type="text" autocapitalize="off" autocomplete="off"
+             autocorrect="off" spellcheck="false" inputmode="text" name="phonemouse-kb"
+             placeholder="撳呢度打字" data-i18n-placeholder="kbPlaceholder">
+      <div id="kbHint" data-i18n="kbHint">喺呢度打字,支援中文輸入法・Enter／Backspace 即時送出</div>
+    </div>
+  </div>
+
+  <div id="mediaPanel" class="panel" hidden>
+    <div id="mediaGrid">
+      <button data-media="prev">⏮ <span data-i18n="mediaPrev">上一首</span></button>
+      <button data-media="play_pause">⏯ <span data-i18n="mediaPlayPause">播放/暫停</span></button>
+      <button data-media="next">⏭ <span data-i18n="mediaNext">下一首</span></button>
+      <button data-media="vol_down">🔉 <span data-i18n="volDown">音量 −</span></button>
+      <button data-media="mute">🔇 <span data-i18n="mute">靜音</span></button>
+      <button data-media="vol_up">🔊 <span data-i18n="volUp">音量 ＋</span></button>
+    </div>
+    <div id="mediaTrackpad">
+      <div id="mediaTrackpadHint" data-i18n="kbTrackpadHint">呢度都撳到滑鼠</div>
+      <div class="scroll-zone-mark"></div>
+    </div>
+  </div>
+
+  <div id="tokenError" class="panel" hidden data-i18n="tokenErrorText">
+    找不到 token。<br>請用電腦終端機顯示嘅網址或掃 QR code 開啟呢個頁面。
+  </div>
+</main>
+
+<nav id="toolbar">
+  <button id="leftClickBtn"><span data-i18n="leftClick">左鍵</span></button>
+  <button id="rightClickBtn"><span data-i18n="rightClick">右鍵</span></button>
+  <button id="kbToggleBtn">⌨️ <span data-i18n="kbToggle">鍵盤</span></button>
+  <button id="mediaToggleBtn">🎵 <span data-i18n="mediaToggle">媒體</span></button>
+</nav>
+
+<div id="settingsOverlay" hidden>
+  <div id="settingsCard">
+    <h2 data-i18n="settingsTitle">設定</h2>
+    <label><span data-i18n="sensitivityLabel">靈敏度</span> <span id="sensVal"></span>
+      <input type="range" id="sensitivityInput" min="0.3" max="3" step="0.1">
+    </label>
+    <label><span data-i18n="scrollSpeedLabel">捲動速度</span> <span id="scrollVal"></span>
+      <input type="range" id="scrollSpeedInput" min="0.3" max="3" step="0.1">
+    </label>
+    <label class="checkbox">
+      <input type="checkbox" id="invertScrollInput"> <span data-i18n="invertScrollLabel">反向捲動</span>
+    </label>
+    <label class="checkbox">
+      <input type="checkbox" id="autoKeyboardInput"> <span data-i18n="autoKeyboardLabel">入鍵盤模式自動彈出鍵盤</span>
+    </label>
+    <div class="settingsRow">
+      <span data-i18n="colorLabel">介面顏色</span>
+      <div id="colorSwatches">
+        <button class="swatch" data-color="#0ea5e9" style="background:#0ea5e9"></button>
+        <button class="swatch" data-color="#22c55e" style="background:#22c55e"></button>
+        <button class="swatch" data-color="#a855f7" style="background:#a855f7"></button>
+        <button class="swatch" data-color="#f97316" style="background:#f97316"></button>
+        <button class="swatch" data-color="#ec4899" style="background:#ec4899"></button>
+        <button class="swatch" data-color="#ef4444" style="background:#ef4444"></button>
+        <input type="color" id="customColorInput" value="#0ea5e9">
+      </div>
+    </div>
+    <div class="settingsRow">
+      <span data-i18n="languageLabel">語言</span>
+      <div id="langButtons">
+        <button class="langBtn" data-lang="zh">繁中</button>
+        <button class="langBtn" data-lang="en">English</button>
+      </div>
+    </div>
+    <button id="closeSettingsBtn"><span data-i18n="closeButton">關閉</span></button>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  // Enables :active CSS feedback on iOS Safari for all buttons.
+  document.addEventListener("touchstart", function () {}, { passive: true });
+
+  function getToken() {
+    const params = new URLSearchParams(location.search);
+    let token = params.get("token");
+    if (token) {
+      try { localStorage.setItem("pm_token", token); } catch (e) {}
+    } else {
+      try { token = localStorage.getItem("pm_token") || ""; } catch (e) { token = ""; }
+    }
+    return token;
+  }
+
+  const TOKEN = getToken();
+
+  // ---- Language & accent color (per-device UI preferences) ---------------
+
+  const STRINGS = {
+    zh: {
+      statusConnecting: "連接中...",
+      statusConnected: "已連線",
+      statusReconnecting: "已斷線,重新連接中...",
+      statusTokenMissing: "缺少 token",
+      tokenErrorText: "找不到 token。<br>請用電腦終端機顯示嘅網址或掃 QR code 開啟呢個頁面。",
+      hint: "單指移動・單指輕點＝左鍵<br>雙指輕點＝右鍵・雙指拖＝捲動<br>輕點後按住＝拖曳・右邊細線＝單指捲動",
+      kbHint: "喺呢度打字,支援中文輸入法・Enter／Backspace 即時送出",
+      kbPlaceholder: "撳呢度打字",
+      kbTrackpadHint: "呢度都撳到滑鼠",
+      mediaPrev: "上一首", mediaPlayPause: "播放/暫停", mediaNext: "下一首",
+      volDown: "音量 −", mute: "靜音", volUp: "音量 ＋",
+      leftClick: "左鍵", rightClick: "右鍵", kbToggle: "鍵盤", mediaToggle: "媒體",
+      settingsTitle: "設定", sensitivityLabel: "靈敏度", scrollSpeedLabel: "捲動速度",
+      invertScrollLabel: "反向捲動", autoKeyboardLabel: "入鍵盤模式自動彈出鍵盤",
+      colorLabel: "介面顏色", languageLabel: "語言",
+      closeButton: "關閉",
+    },
+    en: {
+      statusConnecting: "Connecting...",
+      statusConnected: "Connected",
+      statusReconnecting: "Disconnected, reconnecting...",
+      statusTokenMissing: "Missing token",
+      tokenErrorText: "Token not found.<br>Please open this page using the URL or QR code shown in the computer's terminal.",
+      hint: "Move with one finger・Tap with one finger = left click<br>Two-finger tap = right click・Two-finger drag = scroll<br>Tap then hold = drag・Right edge strip = one-finger scroll",
+      kbHint: "Type here - Chinese input methods supported・Enter/Backspace send instantly",
+      kbPlaceholder: "Tap here to type",
+      kbTrackpadHint: "This area works as a trackpad too",
+      mediaPrev: "Previous", mediaPlayPause: "Play/Pause", mediaNext: "Next",
+      volDown: "Vol −", mute: "Mute", volUp: "Vol +",
+      leftClick: "Left click", rightClick: "Right click", kbToggle: "Keyboard", mediaToggle: "Media",
+      settingsTitle: "Settings", sensitivityLabel: "Sensitivity", scrollSpeedLabel: "Scroll speed",
+      invertScrollLabel: "Invert scroll", autoKeyboardLabel: "Auto-open keyboard in keyboard mode",
+      colorLabel: "Accent color", languageLabel: "Language",
+      closeButton: "Close",
+    },
+  };
+
+  let currentLang = "zh";
+  try { currentLang = localStorage.getItem("pm_lang") || "zh"; } catch (e) {}
+  let currentStatusKey = null;
+
+  function applyLanguage(lang) {
+    currentLang = STRINGS[lang] ? lang : "zh";
+    document.documentElement.lang = currentLang === "en" ? "en" : "zh-Hant";
+    document.querySelectorAll("[data-i18n]").forEach(function (el) {
+      const str = STRINGS[currentLang][el.dataset.i18n];
+      if (str != null) el.innerHTML = str;
+    });
+    document.querySelectorAll("[data-i18n-title]").forEach(function (el) {
+      const str = STRINGS[currentLang][el.dataset.i18nTitle];
+      if (str != null) el.title = str;
+    });
+    document.querySelectorAll("[data-i18n-placeholder]").forEach(function (el) {
+      const str = STRINGS[currentLang][el.dataset.i18nPlaceholder];
+      if (str != null) el.placeholder = str;
+    });
+    document.querySelectorAll(".langBtn").forEach(function (b) {
+      b.classList.toggle("selected", b.dataset.lang === currentLang);
+    });
+    if (currentStatusKey) statusText.textContent = STRINGS[currentLang][currentStatusKey];
+    try { localStorage.setItem("pm_lang", currentLang); } catch (e) {}
+  }
+
+  document.querySelectorAll(".langBtn").forEach(function (btn) {
+    btn.addEventListener("click", function () { applyLanguage(btn.dataset.lang); });
+  });
+
+  const customColorInput = document.getElementById("customColorInput");
+  const ACCENT_KEY = "pm_accent";
+
+  // Recolor the whole interface (not just the accent highlight) from one hex
+  // color: derive dark background/panel/button shades that keep the same hue.
+  function hexToRgb(hex) {
+    hex = hex.replace("#", "");
+    if (hex.length === 3) hex = hex.split("").map(function (c) { return c + c; }).join("");
+    const num = parseInt(hex, 16);
+    return { r: (num >> 16) & 255, g: (num >> 8) & 255, b: num & 255 };
+  }
+  function rgbToHue(r, g, b) {
+    r /= 255; g /= 255; b /= 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    if (max === min) return 0;
+    const d = max - min;
+    let h;
+    switch (max) {
+      case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+      case g: h = (b - r) / d + 2; break;
+      default: h = (r - g) / d + 4;
+    }
+    return h * 60;
+  }
+  function relativeLuminance(r, g, b) {
+    const a = [r, g, b].map(function (v) {
+      v /= 255;
+      return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+    });
+    return 0.2126 * a[0] + 0.7152 * a[1] + 0.0722 * a[2];
+  }
+  function hslToHex(h, s, l) {
+    s /= 100; l /= 100;
+    const k = function (n) { return (n + h / 30) % 12; };
+    const a = s * Math.min(l, 1 - l);
+    const f = function (n) { return l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1))); };
+    const toHex = function (x) { return Math.round(255 * x).toString(16).padStart(2, "0"); };
+    return "#" + toHex(f(0)) + toHex(f(8)) + toHex(f(4));
+  }
+
+  function deriveTheme(hex) {
+    const { r, g, b } = hexToRgb(hex);
+    const h = rgbToHue(r, g, b);
+    const contrast = relativeLuminance(r, g, b) > 0.5 ? "#04121f" : "#f8fafc";
+    const root = document.documentElement.style;
+    root.setProperty("--accent", hex);
+    root.setProperty("--accent-contrast", contrast);
+    root.setProperty("--bg", hslToHex(h, 45, 7));
+    root.setProperty("--panel-bg", hslToHex(h, 35, 11));
+    root.setProperty("--panel-border", hslToHex(h, 30, 18));
+    root.setProperty("--panel-border2", hslToHex(h, 25, 26));
+    root.setProperty("--input-bg", hslToHex(h, 40, 9));
+    root.setProperty("--btn-bg", hslToHex(h, 28, 16));
+    root.setProperty("--btn-bg-active", hslToHex(h, 28, 24));
+    document.querySelectorAll("#colorSwatches .swatch").forEach(function (sw) {
+      sw.classList.toggle("selected", sw.dataset.color.toLowerCase() === hex.toLowerCase());
+    });
+    customColorInput.value = hex;
+    try { localStorage.setItem(ACCENT_KEY, hex); } catch (e) {}
+  }
+
+  document.querySelectorAll("#colorSwatches .swatch").forEach(function (btn) {
+    btn.addEventListener("click", function () { deriveTheme(btn.dataset.color); });
+  });
+  customColorInput.addEventListener("input", function () { deriveTheme(customColorInput.value); });
+
+  applyLanguage(currentLang);
+  (function initAccent() {
+    let accent = "#0ea5e9";
+    try { accent = localStorage.getItem(ACCENT_KEY) || accent; } catch (e) {}
+    deriveTheme(accent);
+  })();
+
+  const statusDot = document.getElementById("statusDot");
+  const statusText = document.getElementById("statusText");
+  const trackpad = document.getElementById("trackpad");
+  const hint = document.getElementById("hint");
+  const keyboardTrackpad = document.getElementById("keyboardTrackpad");
+  const keyboardTrackpadHint = document.getElementById("keyboardTrackpadHint");
+  const mediaTrackpad = document.getElementById("mediaTrackpad");
+  const mediaTrackpadHint = document.getElementById("mediaTrackpadHint");
+  const keyboardPanel = document.getElementById("keyboardPanel");
+  const mediaPanel = document.getElementById("mediaPanel");
+  const tokenError = document.getElementById("tokenError");
+  const kbInput = document.getElementById("kbInput");
+  const leftClickBtn = document.getElementById("leftClickBtn");
+  const rightClickBtn = document.getElementById("rightClickBtn");
+  const kbToggleBtn = document.getElementById("kbToggleBtn");
+  const mediaToggleBtn = document.getElementById("mediaToggleBtn");
+  const settingsBtn = document.getElementById("settingsBtn");
+  const settingsOverlay = document.getElementById("settingsOverlay");
+  const closeSettingsBtn = document.getElementById("closeSettingsBtn");
+  const sensitivityInput = document.getElementById("sensitivityInput");
+  const scrollSpeedInput = document.getElementById("scrollSpeedInput");
+  const invertScrollInput = document.getElementById("invertScrollInput");
+  const autoKeyboardInput = document.getElementById("autoKeyboardInput");
+  const sensVal = document.getElementById("sensVal");
+  const scrollVal = document.getElementById("scrollVal");
+
+  if (!TOKEN) {
+    tokenError.hidden = false;
+    currentStatusKey = "statusTokenMissing";
+    statusText.textContent = STRINGS[currentLang][currentStatusKey];
+    statusDot.className = "dot error";
+    return;
+  }
+
+  // ---- WebSocket -------------------------------------------------------
+
+  let ws = null;
+  let reconnectDelay = 500;
+
+  function setStatus(state, key) {
+    currentStatusKey = key;
+    statusDot.className = "dot " + state;
+    statusText.textContent = STRINGS[currentLang][key];
+  }
+
+  function send(obj) {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      try { ws.send(JSON.stringify(obj)); } catch (e) {}
+    }
+  }
+
+  function connect() {
+    const proto = location.protocol === "https:" ? "wss:" : "ws:";
+    ws = new WebSocket(proto + "//" + location.host + "/ws?token=" + encodeURIComponent(TOKEN));
+    setStatus("connecting", "statusConnecting");
+    ws.addEventListener("open", function () {
+      reconnectDelay = 500;
+      setStatus("ok", "statusConnected");
+    });
+    ws.addEventListener("close", function () {
+      setStatus("error", "statusReconnecting");
+      setTimeout(connect, reconnectDelay);
+      reconnectDelay = Math.min(reconnectDelay * 1.5, 5000);
+    });
+    ws.addEventListener("error", function () {
+      try { ws.close(); } catch (e) {}
+    });
+  }
+  connect();
+
+  // ---- Mode switching ----------------------------------------------------
+
+  let mode = "trackpad";
+
+  const AUTO_KB_KEY = "pm_auto_kb";
+  let autoKeyboard = false;
+  try { autoKeyboard = localStorage.getItem(AUTO_KB_KEY) === "1"; } catch (e) {}
+  autoKeyboardInput.checked = autoKeyboard;
+  autoKeyboardInput.addEventListener("change", function () {
+    autoKeyboard = autoKeyboardInput.checked;
+    try { localStorage.setItem(AUTO_KB_KEY, autoKeyboard ? "1" : "0"); } catch (e) {}
+  });
+
+  function setMode(next) {
+    mode = next;
+    trackpad.hidden = mode !== "trackpad";
+    keyboardPanel.hidden = mode !== "keyboard";
+    mediaPanel.hidden = mode !== "media";
+    kbToggleBtn.classList.toggle("active", mode === "keyboard");
+    mediaToggleBtn.classList.toggle("active", mode === "media");
+    if (mode === "keyboard") {
+      kbInput.value = "";
+      if (autoKeyboard) kbInput.focus();
+    } else {
+      kbInput.blur();
+    }
+  }
+
+  kbToggleBtn.addEventListener("click", function () {
+    setMode(mode === "keyboard" ? "trackpad" : "keyboard");
+  });
+  mediaToggleBtn.addEventListener("click", function () {
+    setMode(mode === "media" ? "trackpad" : "media");
+  });
+  leftClickBtn.addEventListener("click", function () { send({ t: "click", b: "left" }); });
+  rightClickBtn.addEventListener("click", function () { send({ t: "click", b: "right" }); });
+
+  // ---- Trackpad gestures -------------------------------------------------
+
+  const TAP_MOVE_THRESHOLD = 10;
+  const LONG_PRESS_CANCEL_DIST = 24;
+  const TAP_MAX_DURATION = 400;
+  const LONG_PRESS_MS = 450;
+  const DOUBLE_TAP_WINDOW_MS = 300;
+  const DOUBLE_TAP_DIST = 24;
+  const SCROLL_ZONE_WIDTH = 44;
+
+  let gesture = {
+    fingers: 0, startTime: 0, startCentroid: { x: 0, y: 0 }, lastCentroid: { x: 0, y: 0 },
+    moved: false, isDragging: false, isEdgeScroll: false, longPressTimer: null, primaryTouchId: null,
+  };
+  let lastTapUp = { time: -Infinity, x: 0, y: 0 };
+  let hintHidden = false;
+  let kbHintHidden = false;
+  let mediaHintHidden = false;
+  const THREE_FINGER_SWIPE_THRESHOLD = 60;
+  let threeFinger = { startY: 0, fired: false };
+
+  function centroid(touches) {
+    let x = 0, y = 0;
+    for (let i = 0; i < touches.length; i++) { x += touches[i].clientX; y += touches[i].clientY; }
+    return { x: x / touches.length, y: y / touches.length };
+  }
+
+  function hideHintFor(surface) {
+    if (surface === keyboardTrackpad) {
+      if (!kbHintHidden) { keyboardTrackpadHint.classList.add("hidden"); kbHintHidden = true; }
+    } else if (surface === mediaTrackpad) {
+      if (!mediaHintHidden) { mediaTrackpadHint.classList.add("hidden"); mediaHintHidden = true; }
+    } else if (!hintHidden) {
+      hint.classList.add("hidden"); hintHidden = true;
+    }
+  }
+
+  function startDrag() {
+    clearTimeout(gesture.longPressTimer);
+    gesture.isDragging = true;
+    send({ t: "down", b: "left" });
+  }
+
+  function endDrag() {
+    gesture.isDragging = false;
+    send({ t: "up", b: "left" });
+  }
+
+  // Cursor acceleration: near 1x for slow precise motion, up to 2.5x for fast flicks.
+  let pendingMove = { dx: 0, dy: 0 };
+  let moveScheduled = false;
+  function queueMove(dx, dy) {
+    const speed = Math.hypot(dx, dy);
+    const accel = 1 + Math.min(speed / 25, 1) * 1.5;
+    pendingMove.dx += dx * accel;
+    pendingMove.dy += dy * accel;
+    if (!moveScheduled) {
+      moveScheduled = true;
+      requestAnimationFrame(function () {
+        moveScheduled = false;
+        if (pendingMove.dx !== 0 || pendingMove.dy !== 0) {
+          send({ t: "move", dx: pendingMove.dx, dy: pendingMove.dy });
+          pendingMove.dx = 0; pendingMove.dy = 0;
+        }
+      });
+    }
+  }
+
+  let pendingScroll = { dx: 0, dy: 0 };
+  let scrollScheduled = false;
+  function queueScroll(dx, dy) {
+    // Natural scrolling: content follows the finger. 40px of drag ~= one wheel notch.
+    pendingScroll.dx += dx / 40;
+    pendingScroll.dy += dy / 40;
+    if (!scrollScheduled) {
+      scrollScheduled = true;
+      requestAnimationFrame(function () {
+        scrollScheduled = false;
+        if (pendingScroll.dx !== 0 || pendingScroll.dy !== 0) {
+          send({ t: "scroll", dx: pendingScroll.dx, dy: pendingScroll.dy });
+          pendingScroll.dx = 0; pendingScroll.dy = 0;
+        }
+      });
+    }
+  }
+
+  // Simple momentum scrolling after a fast two-finger flick.
+  let lastScrollSampleTime = 0;
+  let scrollVelocity = { x: 0, y: 0 };
+  let momentumActive = false;
+
+  function recordScrollVelocity(dx, dy) {
+    const now = performance.now();
+    if (lastScrollSampleTime) {
+      const dt = now - lastScrollSampleTime;
+      if (dt > 0) scrollVelocity = { x: dx / dt, y: dy / dt };
+    }
+    lastScrollSampleTime = now;
+  }
+
+  function stopMomentum() { momentumActive = false; }
+
+  function startMomentumIfNeeded() {
+    lastScrollSampleTime = 0;
+    let vx = scrollVelocity.x, vy = scrollVelocity.y;
+    if (Math.hypot(vx, vy) < 0.05) return;
+    momentumActive = true;
+    function step() {
+      if (!momentumActive) return;
+      queueScroll(vx * 16, vy * 16);
+      vx *= 0.92; vy *= 0.92;
+      if (Math.hypot(vx, vy) > 0.02) {
+        requestAnimationFrame(step);
+      } else {
+        momentumActive = false;
+      }
+    }
+    requestAnimationFrame(step);
+  }
+
+  function onTouchStart(e) {
+    e.preventDefault();
+    hideHintFor(e.currentTarget);
+    const touches = e.touches;
+
+    if (touches.length === 1 && gesture.fingers === 0) {
+      const t = touches[0];
+      gesture.fingers = 1;
+      gesture.startTime = performance.now();
+      gesture.startCentroid = { x: t.clientX, y: t.clientY };
+      gesture.lastCentroid = gesture.startCentroid;
+      gesture.moved = false;
+      gesture.primaryTouchId = t.identifier;
+
+      const rect = e.currentTarget.getBoundingClientRect();
+      gesture.isEdgeScroll = t.clientX >= rect.right - SCROLL_ZONE_WIDTH;
+
+      if (gesture.isEdgeScroll) {
+        stopMomentum();
+      } else {
+        const dtTap = gesture.startTime - lastTapUp.time;
+        const distTap = Math.hypot(t.clientX - lastTapUp.x, t.clientY - lastTapUp.y);
+        if (dtTap < DOUBLE_TAP_WINDOW_MS && distTap < DOUBLE_TAP_DIST) {
+          startDrag();
+        } else {
+          gesture.longPressTimer = setTimeout(function () {
+            if (gesture.fingers !== 1 || gesture.isDragging) return;
+            // Use live distance-from-start rather than the (stricter) tap-click
+            // "moved" flag: natural finger tremor during a sustained hold easily
+            // exceeds that smaller threshold and shouldn't cancel the drag-arm.
+            const d = Math.hypot(
+              gesture.lastCentroid.x - gesture.startCentroid.x,
+              gesture.lastCentroid.y - gesture.startCentroid.y
+            );
+            if (d <= LONG_PRESS_CANCEL_DIST) startDrag();
+          }, LONG_PRESS_MS);
+        }
+      }
+    } else if (touches.length === 2) {
+      clearTimeout(gesture.longPressTimer);
+      if (gesture.isDragging) endDrag();
+      stopMomentum();
+      gesture.fingers = 2;
+      gesture.startTime = performance.now();
+      gesture.startCentroid = centroid(touches);
+      gesture.lastCentroid = gesture.startCentroid;
+      gesture.moved = false;
+    } else if (touches.length === 3) {
+      clearTimeout(gesture.longPressTimer);
+      if (gesture.isDragging) endDrag();
+      stopMomentum();
+      gesture.fingers = 3;
+      const c3 = centroid(touches);
+      threeFinger.startX = c3.x;
+      threeFinger.startY = c3.y;
+      threeFinger.fired = false;
+    } else {
+      gesture.fingers = touches.length;
+    }
+  }
+
+  function onTouchMove(e) {
+    e.preventDefault();
+    const touches = e.touches;
+
+    if (touches.length === 1 && gesture.fingers === 1) {
+      let t = touches[0];
+      for (let i = 0; i < touches.length; i++) {
+        if (touches[i].identifier === gesture.primaryTouchId) { t = touches[i]; break; }
+      }
+      const dx = t.clientX - gesture.lastCentroid.x;
+      const dy = t.clientY - gesture.lastCentroid.y;
+      gesture.lastCentroid = { x: t.clientX, y: t.clientY };
+      if (gesture.isEdgeScroll) {
+        gesture.moved = true;
+        recordScrollVelocity(0, dy);
+        queueScroll(0, dy);
+      } else {
+        const dist = Math.hypot(t.clientX - gesture.startCentroid.x, t.clientY - gesture.startCentroid.y);
+        if (dist > TAP_MOVE_THRESHOLD) gesture.moved = true;
+        if (dist > LONG_PRESS_CANCEL_DIST) clearTimeout(gesture.longPressTimer);
+        queueMove(dx, dy);
+      }
+    } else if (touches.length === 2 && gesture.fingers === 2) {
+      const c = centroid(touches);
+      const dx = c.x - gesture.lastCentroid.x;
+      const dy = c.y - gesture.lastCentroid.y;
+      const dist = Math.hypot(c.x - gesture.startCentroid.x, c.y - gesture.startCentroid.y);
+      if (dist > TAP_MOVE_THRESHOLD) gesture.moved = true;
+      gesture.lastCentroid = c;
+      recordScrollVelocity(dx, dy);
+      queueScroll(dx, dy);
+    } else if (touches.length === 3 && gesture.fingers === 3) {
+      const c = centroid(touches);
+      const dx = c.x - threeFinger.startX;
+      const dy = c.y - threeFinger.startY;
+      if (!threeFinger.fired) {
+        if (dy < -THREE_FINGER_SWIPE_THRESHOLD) {
+          threeFinger.fired = true;
+          send({ t: "combo", k: ["win", "tab"] }); // opens Task View, like macOS Mission Control
+        } else if (dx < -THREE_FINGER_SWIPE_THRESHOLD) {
+          threeFinger.fired = true;
+          send({ t: "combo", k: ["ctrl", "win", "right"] }); // swipe left -> desktop to the right
+        } else if (dx > THREE_FINGER_SWIPE_THRESHOLD) {
+          threeFinger.fired = true;
+          send({ t: "combo", k: ["ctrl", "win", "left"] }); // swipe right -> desktop to the left
+        }
+      }
+    }
+  }
+
+  function onTouchEnd(e) {
+    e.preventDefault();
+    const remaining = e.touches.length;
+
+    if (gesture.fingers === 1) {
+      if (gesture.isDragging) {
+        endDrag();
+      } else if (gesture.isEdgeScroll) {
+        gesture.isEdgeScroll = false;
+        startMomentumIfNeeded();
+      } else {
+        clearTimeout(gesture.longPressTimer);
+        const dt = performance.now() - gesture.startTime;
+        if (!gesture.moved && dt < TAP_MAX_DURATION) {
+          send({ t: "click", b: "left" });
+          lastTapUp = { time: performance.now(), x: gesture.lastCentroid.x, y: gesture.lastCentroid.y };
+        }
+      }
+    } else if (gesture.fingers === 2) {
+      const dt = performance.now() - gesture.startTime;
+      if (!gesture.moved && dt < TAP_MAX_DURATION) {
+        send({ t: "click", b: "right" });
+      } else {
+        startMomentumIfNeeded();
+      }
+    }
+
+    if (remaining === 0) {
+      gesture.fingers = 0;
+    } else {
+      const touches = e.touches;
+      gesture.fingers = remaining;
+      gesture.lastCentroid = remaining === 1
+        ? { x: touches[0].clientX, y: touches[0].clientY }
+        : centroid(touches);
+      gesture.startCentroid = gesture.lastCentroid;
+      gesture.startTime = performance.now();
+      gesture.moved = true; // continuing a multi-touch gesture: don't fire a click on next lift
+      gesture.primaryTouchId = touches[0].identifier;
+    }
+  }
+  [trackpad, keyboardTrackpad, mediaTrackpad].forEach(function (surface) {
+    surface.addEventListener("touchstart", onTouchStart, { passive: false });
+    surface.addEventListener("touchmove", onTouchMove, { passive: false });
+    surface.addEventListener("touchend", onTouchEnd, { passive: false });
+    surface.addEventListener("touchcancel", onTouchEnd, { passive: false });
+  });
+
+  // ---- Keyboard / IME ------------------------------------------------------
+
+  let composing = false;
+
+  function flushKbInput() {
+    const v = kbInput.value;
+    if (v) {
+      send({ t: "text", s: v });
+      kbInput.value = "";
+    }
+  }
+
+  kbInput.addEventListener("compositionstart", function () { composing = true; });
+  kbInput.addEventListener("compositionend", function () { composing = false; flushKbInput(); });
+  kbInput.addEventListener("input", function (e) {
+    if (composing || e.isComposing) return;
+    flushKbInput();
+  });
+  kbInput.addEventListener("keydown", function (e) {
+    if (composing || e.isComposing) return;
+    if (e.key === "Enter") { e.preventDefault(); send({ t: "key", k: "enter" }); return; }
+    if (e.key === "Backspace") { e.preventDefault(); send({ t: "key", k: "backspace" }); return; }
+    if (e.key === "Escape") { e.preventDefault(); send({ t: "key", k: "esc" }); return; }
+    if (e.key === "Tab") { e.preventDefault(); send({ t: "key", k: "tab" }); return; }
+  });
+
+  document.querySelectorAll("#shortcutsGrid button").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      if (btn.dataset.key) send({ t: "key", k: btn.dataset.key });
+      else if (btn.dataset.combo) send({ t: "combo", k: btn.dataset.combo.split(",") });
+    });
+  });
+
+  // Volume buttons repeat while held, like physical volume keys; everything
+  // else in the media grid is a simple tap.
+  const REPEATABLE_MEDIA = ["vol_up", "vol_down"];
+  const REPEAT_INITIAL_DELAY = 350;
+  const REPEAT_INTERVAL_MS = 120;
+
+  document.querySelectorAll("#mediaGrid button").forEach(function (btn) {
+    if (REPEATABLE_MEDIA.indexOf(btn.dataset.media) !== -1) return;
+    btn.addEventListener("click", function () {
+      send({ t: "media", k: btn.dataset.media });
+    });
+  });
+
+  document.querySelectorAll("#mediaGrid button").forEach(function (btn) {
+    if (REPEATABLE_MEDIA.indexOf(btn.dataset.media) === -1) return;
+    let initialTimer = null;
+    let repeatTimer = null;
+    function fire() { send({ t: "media", k: btn.dataset.media }); }
+    function start(e) {
+      e.preventDefault();
+      fire();
+      initialTimer = setTimeout(function () {
+        repeatTimer = setInterval(fire, REPEAT_INTERVAL_MS);
+      }, REPEAT_INITIAL_DELAY);
+    }
+    function stop() {
+      clearTimeout(initialTimer);
+      clearInterval(repeatTimer);
+    }
+    btn.addEventListener("touchstart", start, { passive: false });
+    btn.addEventListener("touchend", stop);
+    btn.addEventListener("touchcancel", stop);
+  });
+
+  // ---- Settings --------------------------------------------------------
+
+  async function loadSettings() {
+    try {
+      const res = await fetch("/api/settings?token=" + encodeURIComponent(TOKEN));
+      if (!res.ok) return;
+      const data = await res.json();
+      sensitivityInput.value = data.sensitivity;
+      scrollSpeedInput.value = data.scroll_speed;
+      invertScrollInput.checked = !!data.invert_scroll;
+      sensVal.textContent = data.sensitivity.toFixed(1);
+      scrollVal.textContent = data.scroll_speed.toFixed(1);
+    } catch (e) {}
+  }
+
+  async function saveSettings() {
+    const body = {
+      sensitivity: parseFloat(sensitivityInput.value),
+      scroll_speed: parseFloat(scrollSpeedInput.value),
+      invert_scroll: invertScrollInput.checked,
+    };
+    sensVal.textContent = body.sensitivity.toFixed(1);
+    scrollVal.textContent = body.scroll_speed.toFixed(1);
+    try {
+      await fetch("/api/settings?token=" + encodeURIComponent(TOKEN), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    } catch (e) {}
+  }
+
+  sensitivityInput.addEventListener("input", saveSettings);
+  scrollSpeedInput.addEventListener("input", saveSettings);
+  invertScrollInput.addEventListener("change", saveSettings);
+
+  settingsBtn.addEventListener("click", function () {
+    loadSettings();
+    settingsOverlay.hidden = false;
+  });
+  closeSettingsBtn.addEventListener("click", function () { settingsOverlay.hidden = true; });
+})();
+</script>
+</body>
+</html>
