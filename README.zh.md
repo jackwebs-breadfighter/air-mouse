@@ -143,7 +143,7 @@ AirMouse 一開機就會喺 Windows 工作列(右下角,時鐘附近)出現一�
 ## 檔案結構
 
 ```
-phonemouse/
+air-mouse/
   server.py          aiohttp app、WebSocket handler、token 驗證、工作列圖示邏輯
   winput.py          SendInput 包裝 (mouse_move, click, scroll, type_text, key_combo, media)
   traymenu.py        用 ctypes 直接寫嘅工作列圖示 (Shell_NotifyIcon),唔使 pystray/Pillow

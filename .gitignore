@@ -8,7 +8,7 @@ key.pem
 __pycache__/
 *.pyc
 
-# PyInstaller build output (built via build_exe.ps1 - PhoneMouse.spec stays tracked)
+# PyInstaller build output (built via build_exe.ps1 - AirMouse.spec stays tracked)
 build/
 dist/
 

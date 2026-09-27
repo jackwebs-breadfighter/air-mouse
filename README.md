@@ -175,7 +175,7 @@ without typing the URL again.
 ## File Structure
 
 ```
-phonemouse/
+air-mouse/
   server.py          aiohttp app, WebSocket handler, token verification, tray icon logic
   winput.py          SendInput wrapper (mouse_move, click, scroll, type_text, key_combo, media)
   traymenu.py        System tray icon written directly with ctypes (Shell_NotifyIcon), no pystray/Pillow
